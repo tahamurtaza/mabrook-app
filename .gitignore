@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep the example env file tracked
+!.env.example
+
+# generated Prisma client
+/src/generated
+
+# local PGlite dev database
+/.pglite

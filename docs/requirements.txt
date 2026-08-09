@@ -1,0 +1,12 @@
+I am willing a web app for maintaining occasions which are added to a shared list. These occasions can be birthdays anniversary new milestone like getting a new office or getting a new house or starting a new job or starting school of different family members. We would like to also add the hijri date to each occasion for example my birthday is on 14th of November 2008 and my Islamic birthday is on 17th of Zilkad 1429. Now since we are a big family we would like to see upcoming events in both the calendars. For example it could be my birthday as per Gregorian calendar and it could be my brother's birthday as per islamic calendar. So we go step-by-step to build this web app. 
+
+First the objects are events, these will have an absolute Gregorian and Islamic dates with the year, title, people. For example and anniversary event can be linked to 2 people. 
+
+Second step is to add the Gregorian to history converter. I will share the API which we have to use. 
+
+Third step is to build a calendar view in which I can view all the upcoming event events in a list format. 
+
+The fourth step is to build the add a new event view which can allow me to add event events. 
+
+For use postgres, we will be hosting this application on railway.com so I will instruct you to provide the profile for it later on.
+

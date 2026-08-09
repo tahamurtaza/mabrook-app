@@ -1,0 +1,247 @@
+// Mabrook — a shared family occasions calendar, in both the Gregorian and the
+// Dawoodi Bohra Hijri calendars.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Accounts
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions       Session[]
+  createdEvents  Event[]       @relation("EventCreatedBy")
+  memberships    GroupMember[]
+  createdInvites Invite[]      @relation("InviteCreatedBy")
+
+  /// The roster entries this login is linked to, at most one per group.
+  people Person[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Groups
+// ---------------------------------------------------------------------------
+
+enum GroupType {
+  FAMILY
+  FRIENDS
+  SCHOOL
+  WORK
+  NEIGHBOURS
+  OTHER
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// A shared calendar. Every occasion and every person belongs to exactly one
+/// group, and is visible only to that group's members.
+model Group {
+  id        String    @id @default(cuid())
+  name      String
+  type      GroupType @default(FAMILY)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  members GroupMember[]
+  invites Invite[]
+  events  Event[]
+  people  Person[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId  String
+  userId   String
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  /// The invite this member joined through, kept for the audit trail.
+  invitedViaId String?
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+/// A shareable join link. The id *is* the secret in the URL, so it is generated
+/// from a CSPRNG rather than a guessable cuid.
+///
+/// Multi-use on purpose: one link posted to a family chat lets everyone join.
+/// It stops working when it expires or is revoked.
+model Invite {
+  id        String    @id
+  groupId   String
+  role      GroupRole @default(MEMBER)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  createdById String?
+  createdBy   User?   @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("invites")
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+/// Someone an occasion is about. Rosters are per-group: the same human in both
+/// your family group and a friends group is two rows, so no group can ever see
+/// who is in another.
+model Person {
+  id        String   @id @default(cuid())
+  name      String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// Set when this roster entry is a member of the group with a login.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  events EventPerson[]
+
+  @@unique([groupId, userId])
+  @@index([groupId, name])
+  @@map("people")
+}
+
+// ---------------------------------------------------------------------------
+// Occasions
+// ---------------------------------------------------------------------------
+
+enum EventType {
+  BIRTHDAY
+  ANNIVERSARY
+  ENGAGEMENT
+  NIKAH
+  NEW_HOME
+  NEW_JOB
+  NEW_OFFICE
+  SCHOOL_START
+  GRADUATION
+  OTHER
+}
+
+enum CalendarSystem {
+  GREGORIAN
+  HIJRI
+}
+
+/// One occasion, stored with its absolute date in *both* calendars.
+///
+/// The two dates are always kept consistent: whichever one is entered, the
+/// other is derived by `src/lib/hijri`. `afterSunset` is part of that
+/// derivation — the Islamic day begins at Maghrib, so an occasion after sunset
+/// falls on the next Hijri day.
+///
+/// `observedCalendar` is separate from the dates: it says which calendar the
+/// family counts the anniversary in. One person's birthday comes round every
+/// 14 November; their brother's comes round every 17 Zilqadah, which drifts
+/// about eleven days earlier each Gregorian year.
+model Event {
+  id    String    @id @default(cuid())
+  title String
+  type  EventType @default(OTHER)
+  notes String?
+
+  /// The group whose calendar this occasion appears on.
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// Which calendar this occasion's anniversary is counted in.
+  observedCalendar CalendarSystem @default(GREGORIAN)
+
+  /// Which calendar the date was originally entered in; the other is derived.
+  enteredCalendar CalendarSystem @default(GREGORIAN)
+
+  /// Absolute Gregorian date. Stored as parts, never as a timestamp — a
+  /// birthday is a calendar fact, and a timestamp would shift it by timezone.
+  gregorianYear  Int
+  gregorianMonth Int /// 1-12
+  gregorianDay   Int /// 1-31
+
+  /// Absolute Hijri date, derived from the Gregorian date and `afterSunset`.
+  hijriYear  Int
+  hijriMonth Int /// 0-11, 0 = Moharram
+  hijriDay   Int /// 1-30
+
+  /// True when the occasion happened after Maghrib, shifting the Hijri day by one.
+  afterSunset Boolean @default(false)
+
+  /// False for one-off occasions that should not come round again.
+  recurring Boolean @default(true)
+
+  people EventPerson[]
+
+  createdById String?
+  createdBy   User?   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId])
+  @@index([observedCalendar, gregorianMonth, gregorianDay])
+  @@index([observedCalendar, hijriMonth, hijriDay])
+  @@index([createdById])
+  @@map("events")
+}
+
+/// Links an occasion to the people it is about — an anniversary has two.
+model EventPerson {
+  eventId  String
+  personId String
+
+  /// Optional label, e.g. "bride" and "groom" on a nikah.
+  role String?
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, personId])
+  @@index([personId])
+  @@map("event_people")
+}

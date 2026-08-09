@@ -1,26 +1,97 @@
 @import "tailwindcss";
 
+/*
+ * Mabrook — "congratulations". Warm and celebratory, but calm enough to read a
+ * long list in. Deep green carries the Hijri side, amber the Gregorian, so the
+ * two calendars stay tellable apart at a glance without relying on colour alone.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --surface: #fbf8f3;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f2ede4;
+  --border: #e4dcce;
+  --border-strong: #d2c7b4;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --text: #1f2420;
+  --text-muted: #6b6a63;
+  --text-faint: #918e85;
+
+  --accent: #0f6b4f;
+  --accent-hover: #0b543e;
+  --accent-soft: #e3f0ea;
+  --accent-text: #0b543e;
+
+  --gold: #a9741a;
+  --gold-soft: #f8eeda;
+
+  --danger: #a8332a;
+  --danger-soft: #fbe9e7;
+
+  --today: #b4541a;
+  --today-soft: #fbeade;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --surface: #141715;
+    --surface-raised: #1c211e;
+    --surface-sunken: #101312;
+    --border: #2c332e;
+    --border-strong: #3d453f;
+
+    --text: #eae7df;
+    --text-muted: #a3a49c;
+    --text-faint: #77796f;
+
+    --accent: #4bbd8f;
+    --accent-hover: #63d0a3;
+    --accent-soft: #14312639;
+    --accent-text: #7fd7b3;
+
+    --gold: #d9a441;
+    --gold-soft: #3a2e1738;
+
+    --danger: #e08078;
+    --danger-soft: #3a201d;
+
+    --today: #e59460;
+    --today-soft: #3a251a;
   }
 }
 
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --color-ink: var(--text);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-today: var(--today);
+  --color-today-soft: var(--today-soft);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep day counts and dates from jittering between rows. */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }

@@ -1,0 +1,13 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm run build"
+
+[deploy]
+# Migrations run on boot, before the server accepts traffic. Fine for a single
+# replica; if this ever scales out, move it to a Railway pre-deploy command so
+# two instances can't migrate at once.
+startCommand = "npx prisma migrate deploy && npx next start -p $PORT"
+healthcheckPath = "/login"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
