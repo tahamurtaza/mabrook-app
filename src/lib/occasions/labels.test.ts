@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { personalDateLabel, personalDateTitle } from "./labels";
+import { personalDateLabel, personalDateTitle, titleForTurn } from "./labels";
 
 describe("personalDateTitle", () => {
   it("names the person on a birthday or anniversary", () => {
@@ -33,6 +33,29 @@ describe("birthday wording", () => {
 
   it("keeps the wording when the name changes", () => {
     expect(personalDateTitle("Taha Bombaywala", { type: "BIRTHDAY", label: null, observedCalendar: "HIJRI" })).toBe("Taha Bombaywala's Waras");
+  });
+});
+
+describe("titleForTurn", () => {
+  it("calls the Hijri turn of a birthday kept by both calendars a Waras", () => {
+    expect(titleForTurn("Taha's birthday", "BIRTHDAY", "HIJRI")).toBe("Taha's Waras");
+    expect(titleForTurn("Taha's birthday", "BIRTHDAY", "GREGORIAN")).toBe("Taha's birthday");
+  });
+
+  it("works on titles people typed, whatever the capitals", () => {
+    expect(titleForTurn("Abbas Birthday", "BIRTHDAY", "HIJRI")).toBe("Abbas Waras");
+    expect(titleForTurn("Abbas Waras", "BIRTHDAY", "GREGORIAN")).toBe("Abbas birthday");
+    expect(titleForTurn("Waras of Taha", "BIRTHDAY", "GREGORIAN")).toBe("Birthday of Taha");
+  });
+
+  it("names both when the two calendars land on the same day", () => {
+    expect(titleForTurn("Taha's birthday", "BIRTHDAY", "BOTH")).toBe("Taha's birthday and Waras");
+  });
+
+  it("leaves other occasions, and titles without either word, alone", () => {
+    expect(titleForTurn("Taha's birthday party", "ANNIVERSARY", "HIJRI")).toBe("Taha's birthday party");
+    expect(titleForTurn("Taha turns 18", "BIRTHDAY", "HIJRI")).toBe("Taha turns 18");
+    expect(titleForTurn("Birthdays at school", "BIRTHDAY", "HIJRI")).toBe("Birthdays at school");
   });
 });
 

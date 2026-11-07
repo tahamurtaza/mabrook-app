@@ -10,6 +10,7 @@ import {
   type ObservedCalendar,
   type Occurrence,
 } from "./occurrence";
+import { titleForTurn } from "./labels";
 
 export interface UpcomingOccasion {
   /** The first copy's id. See `ids` for an occasion shared to several groups. */
@@ -53,7 +54,7 @@ function toOccasion(event: EventRow, occurrence: Occurrence): UpcomingOccasion {
   return {
     id: event.id,
     ids: [event.id],
-    title: event.title,
+    title: titleForTurn(event.title, event.type, occurrence.anchor),
     type: event.type,
     notes: event.notes,
     observedCalendar: event.observedCalendar,

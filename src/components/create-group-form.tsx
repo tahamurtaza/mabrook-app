@@ -27,7 +27,7 @@ export function CreateGroupForm() {
           required
           maxLength={80}
           className={fieldClass}
-          placeholder="The Bombaywalas"
+          placeholder="The Kapadias"
         />
       </div>
 

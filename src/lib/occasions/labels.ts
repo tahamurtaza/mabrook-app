@@ -99,11 +99,33 @@ export function personalDateTitle(
 
 /**
  * What a birthday is called. Waras is the Hijri word for it, so a birthday kept
- * by the Hijri calendar is a Waras. Anyone kept by both stays a birthday, the
- * word a Gregorian reader expects.
+ * by the Hijri calendar is a Waras. One kept by both is stored as a birthday;
+ * `titleForTurn` renames its Hijri turn as it's shown.
  */
 export function birthdayWord(observed: ObservedCalendar): string {
   return observed === "HIJRI" ? "Waras" : "birthday";
+}
+
+/**
+ * An occasion's title for one particular turn of it.
+ *
+ * A birthday kept by both calendars comes round twice a year as one occasion,
+ * so its name can't be fixed when it's saved: the Gregorian turn is a birthday
+ * and the Hijri turn a Waras. Going by the type rather than the wording, it
+ * works on titles people typed themselves ("Abbas Birthday" on its Hijri turn
+ * reads "Abbas Waras"). Titles without either word are left as written.
+ */
+export function titleForTurn(title: string, type: EventType, anchor: ObservedCalendar): string {
+  if (type !== "BIRTHDAY") return title;
+
+  if (anchor === "HIJRI") return title.replace(/\bbirthday\b/gi, "Waras");
+  if (anchor === "GREGORIAN") {
+    return title.replace(/\bwaras\b/gi, (_match, offset: number) =>
+      offset === 0 ? "Birthday" : "birthday",
+    );
+  }
+  // Both calendars land on the same day, roughly once a generation.
+  return title.replace(/\bbirthday\b/gi, (match) => `${match} and Waras`);
 }
 
 /**

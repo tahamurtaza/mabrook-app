@@ -58,7 +58,7 @@ export function AuthForm({
                 required
                 maxLength={40}
                 className={fieldClass}
-                placeholder="Fatema"
+                placeholder="Rashida"
               />
             </div>
             <div>
@@ -72,7 +72,7 @@ export function AuthForm({
                 required
                 maxLength={40}
                 className={fieldClass}
-                placeholder="Bombaywala"
+                placeholder="Kapadia"
               />
             </div>
           </div>

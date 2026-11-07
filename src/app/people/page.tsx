@@ -3,7 +3,12 @@ import { EmptyState } from "@/components/empty-state";
 import { PeopleDirectory, type DirectoryGroup } from "@/components/people-directory";
 import { getCurrentUser } from "@/lib/auth/session";
 import { formatGregorian, formatHijri, toISODate } from "@/lib/hijri/hijri";
-import { describeYears, EVENT_TYPE_EMOJI, GROUP_TYPE_EMOJI } from "@/lib/occasions/labels";
+import {
+  describeYears,
+  EVENT_TYPE_EMOJI,
+  GROUP_TYPE_EMOJI,
+  titleForTurn,
+} from "@/lib/occasions/labels";
 import { nextOccurrence } from "@/lib/occasions/occurrence";
 import { getPeopleByGroup } from "@/lib/occasions/queries";
 import { today } from "@/lib/today";
@@ -27,7 +32,8 @@ export default async function PeoplePage() {
         const next = event.recurring ? nextOccurrence(event, now) : null;
         return {
           id: event.id,
-          title: event.title,
+          // Named for the turn that's coming, so a Hijri turn reads as a Waras.
+          title: next ? titleForTurn(event.title, event.type, next.anchor) : event.title,
           emoji: EVENT_TYPE_EMOJI[event.type],
           originGregorian: formatGregorian({
             year: event.gregorianYear,

@@ -132,7 +132,7 @@ export function EventForm({
                 required
                 maxLength={120}
                 className={`${fieldClass} text-lg`}
-                placeholder="Taha's birthday"
+                placeholder="Yusuf's birthday"
               />
             </div>
 
@@ -279,7 +279,7 @@ export function EventForm({
                 placeholder={
                   people.length > 0
                     ? "Or add new people by full name, separated by commas"
-                    : "Full names, separated by commas — e.g. Taha Bombaywala, Fatema Bombaywala"
+                    : "Full names, separated by commas — e.g. Rashida Kapadia, Yusuf Kapadia"
                 }
               />
               <p className="mt-1.5 text-xs text-faint">
