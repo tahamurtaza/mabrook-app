@@ -1,97 +1,256 @@
 @import "tailwindcss";
 
 /*
- * Mabrook — "congratulations". Warm and celebratory, but calm enough to read a
- * long list in. Deep green carries the Hijri side, amber the Gregorian, so the
- * two calendars stay tellable apart at a glance without relying on colour alone.
+ * Mabrook's design system.
+ *
+ * Paper and ink, and two calendar colours that never mean anything else:
+ *
+ *   amber  — the Gregorian calendar
+ *   teal   — the Hijri calendar
+ *   rose   — today, and only today
+ *   plum   — two or more occasions landing on the same day
+ *
+ * Because the whole app is about holding two calendars side by side, every
+ * date in it is coloured by the calendar it belongs to. Learn the pairing once
+ * and every row, cell and chip reads at a glance. Actions are ink, so they
+ * never compete with the dates for colour.
+ *
+ * Structure comes from hairlines and alignment rather than from cards: lists
+ * are divided by rules, panels sit on a slightly different paper, and shadows
+ * are reserved for things that genuinely float (menus, the mobile tab bar).
  */
 :root {
-  --surface: #fbf8f3;
-  --surface-raised: #ffffff;
-  --surface-sunken: #f2ede4;
-  --border: #e4dcce;
-  --border-strong: #d2c7b4;
+  color-scheme: light;
 
-  --text: #1f2420;
-  --text-muted: #6b6a63;
-  --text-faint: #918e85;
+  --paper: #f7f4ee;
+  --surface: #fffefb;
+  --sunken: #f0ece3;
+  --line: #e6e0d4;
+  --line-strong: #d2c9b8;
 
-  --accent: #0f6b4f;
-  --accent-hover: #0b543e;
-  --accent-soft: #e3f0ea;
-  --accent-text: #0b543e;
+  --ink: #1f1b16;
+  --ink-soft: #3d372f;
+  --muted: #5f574d;
+  --faint: #776e62;
 
-  --gold: #a9741a;
-  --gold-soft: #f8eeda;
+  /* Actions are ink on paper. */
+  --action: #1f1b16;
+  --action-hover: #3d372f;
+  --action-text: #fbf8f2;
 
-  --danger: #a8332a;
-  --danger-soft: #fbe9e7;
+  --greg: #95560a;
+  --greg-soft: #f6ead3;
+  --greg-line: #e8d3a9;
+  --greg-band: rgb(205 140 40 / 0.07);
 
-  --today: #b4541a;
-  --today-soft: #fbeade;
+  --hijri: #0c6a5f;
+  --hijri-soft: #e1efe9;
+  --hijri-line: #b9dacd;
+  --hijri-band: rgb(12 106 95 / 0.06);
+
+  --today: #c4283d;
+  --today-soft: #fbe7e8;
+
+  --clash: #74389a;
+  --clash-soft: #f3eaf7;
+
+  --danger: #b42318;
+  --danger-soft: #fdeceb;
+
+  --shadow-float: 0 1px 2px rgb(31 27 22 / 0.06), 0 12px 32px -12px rgb(31 27 22 / 0.22);
 }
 
+/*
+ * Dark. Written twice because a media query can't share a rule with a selector:
+ * first for Auto on a dark device, then for Dark chosen outright. Keep the two
+ * in step. Light is just :root, which `data-theme="light"` leaves alone.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #141715;
-    --surface-raised: #1c211e;
-    --surface-sunken: #101312;
-    --border: #2c332e;
-    --border-strong: #3d453f;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #14120f;
+    --surface: #1b1915;
+    --sunken: #221f1a;
+    --line: #2f2b24;
+    --line-strong: #453f35;
 
-    --text: #eae7df;
-    --text-muted: #a3a49c;
-    --text-faint: #77796f;
+    --ink: #f2ede3;
+    --ink-soft: #ddd6c9;
+    --muted: #b0a798;
+    --faint: #8f8679;
 
-    --accent: #4bbd8f;
-    --accent-hover: #63d0a3;
-    --accent-soft: #14312639;
-    --accent-text: #7fd7b3;
+    --action: #f2ede3;
+    --action-hover: #ffffff;
+    --action-text: #14120f;
 
-    --gold: #d9a441;
-    --gold-soft: #3a2e1738;
+    --greg: #e3b266;
+    --greg-soft: #2c2316;
+    --greg-line: #4a3b22;
+    --greg-band: rgb(227 178 102 / 0.08);
 
-    --danger: #e08078;
-    --danger-soft: #3a201d;
+    --hijri: #63d0bd;
+    --hijri-soft: #10302a;
+    --hijri-line: #1e4a41;
+    --hijri-band: rgb(99 208 189 / 0.08);
 
-    --today: #e59460;
-    --today-soft: #3a251a;
+    --today: #ff6f80;
+    --today-soft: #3a1c21;
+
+    --clash: #cfa6ec;
+    --clash-soft: #2d2036;
+
+    --danger: #f4776a;
+    --danger-soft: #3b201d;
+
+    --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.7);
   }
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #14120f;
+  --surface: #1b1915;
+  --sunken: #221f1a;
+  --line: #2f2b24;
+  --line-strong: #453f35;
+
+  --ink: #f2ede3;
+  --ink-soft: #ddd6c9;
+  --muted: #b0a798;
+  --faint: #8f8679;
+
+  --action: #f2ede3;
+  --action-hover: #ffffff;
+  --action-text: #14120f;
+
+  --greg: #e3b266;
+  --greg-soft: #2c2316;
+  --greg-line: #4a3b22;
+  --greg-band: rgb(227 178 102 / 0.08);
+
+  --hijri: #63d0bd;
+  --hijri-soft: #10302a;
+  --hijri-line: #1e4a41;
+  --hijri-band: rgb(99 208 189 / 0.08);
+
+  --today: #ff6f80;
+  --today-soft: #3a1c21;
+
+  --clash: #cfa6ec;
+  --clash-soft: #2d2036;
+
+  --danger: #f4776a;
+  --danger-soft: #3b201d;
+
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.7);
+}
+
 @theme inline {
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+
+  --color-paper: var(--paper);
   --color-surface: var(--surface);
-  --color-raised: var(--surface-raised);
-  --color-sunken: var(--surface-sunken);
-  --color-line: var(--border);
-  --color-line-strong: var(--border-strong);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
 
-  --color-ink: var(--text);
-  --color-muted: var(--text-muted);
-  --color-faint: var(--text-faint);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
 
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-text: var(--accent-text);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-action-text: var(--action-text);
 
-  --color-gold: var(--gold);
-  --color-gold-soft: var(--gold-soft);
+  --color-greg: var(--greg);
+  --color-greg-soft: var(--greg-soft);
+  --color-greg-line: var(--greg-line);
+  --color-greg-band: var(--greg-band);
+
+  --color-hijri: var(--hijri);
+  --color-hijri-soft: var(--hijri-soft);
+  --color-hijri-line: var(--hijri-line);
+  --color-hijri-band: var(--hijri-band);
+
+  --color-today: var(--today);
+  --color-today-soft: var(--today-soft);
+
+  --color-clash: var(--clash);
+  --color-clash-soft: var(--clash-soft);
 
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
 
-  --color-today: var(--today);
-  --color-today-soft: var(--today-soft);
+  --shadow-float: var(--shadow-float);
+}
+
+html {
+  background: var(--paper);
 }
 
 body {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Tabular figures keep day counts and dates from jittering between rows. */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Small capitals for weekday and section labels. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The serif is optical-size aware; let it draw display cuts at large sizes. */
+.font-display {
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* `<details>` rows: hide the native marker, rotate our own chevron. */
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+details[open] > summary .chevron {
+  transform: rotate(180deg);
+}
+
+/* Horizontal chip rows scroll without a visible bar on touch screens. */
+.scroll-row {
+  scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * One visible focus style for everything reachable by keyboard. Defined once
+ * here rather than per component so nothing can quietly ship without it.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

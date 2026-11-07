@@ -6,78 +6,38 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requireMembership } from "@/lib/groups/access";
-import { daysInHijriMonth } from "@/lib/hijri/hijri";
-import { deriveDates } from "@/lib/occasions/derive";
+import {
+  checkDateEntry,
+  dateEntryFields,
+  EVENT_TYPES,
+  readDateEntry,
+  resolveDateEntry,
+} from "@/lib/occasions/date-entry";
+import { safeNext } from "@/lib/safe-next";
 
 export interface EventFormState {
   error?: string;
 }
 
-const EVENT_TYPES = [
-  "BIRTHDAY",
-  "ANNIVERSARY",
-  "ENGAGEMENT",
-  "NIKAH",
-  "NEW_HOME",
-  "NEW_JOB",
-  "NEW_OFFICE",
-  "SCHOOL_START",
-  "GRADUATION",
-  "OTHER",
-] as const;
-
 const schema = z
   .object({
-    groupId: z.string().min(1, "Choose which group this belongs to."),
+    groupIds: z
+      .array(z.string().min(1))
+      .min(1, "Choose at least one group to share it with.")
+      .max(50),
     title: z.string().trim().min(1, "Give the occasion a title.").max(120),
     type: z.enum(EVENT_TYPES),
     notes: z.string().trim().max(1000).optional().or(z.literal("")),
-
-    enteredCalendar: z.enum(["GREGORIAN", "HIJRI"]),
-    observedCalendar: z.enum(["GREGORIAN", "HIJRI"]),
-    afterSunset: z.coerce.boolean(),
     recurring: z.coerce.boolean(),
 
-    // Present when entering a Gregorian date.
-    gregorianDate: z.string().optional(),
+    ...dateEntryFields,
 
-    // Present when entering a Hijri date.
-    hijriYear: z.coerce.number().int().min(1).max(2000).optional(),
-    hijriMonth: z.coerce.number().int().min(0).max(11).optional(),
-    hijriDay: z.coerce.number().int().min(1).max(30).optional(),
-
-    personIds: z.array(z.string()),
+    // Names rather than ids: rosters are per group, so the same person is a
+    // different row in each group the occasion is shared with.
+    personNames: z.array(z.string().trim().min(1).max(120)).max(100),
     newPeople: z.string().optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.enteredCalendar === "GREGORIAN") {
-      if (!value.gregorianDate || !/^\d{4}-\d{2}-\d{2}$/.test(value.gregorianDate)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Pick the date it happened.",
-          path: ["gregorianDate"],
-        });
-      }
-      return;
-    }
-
-    const { hijriYear, hijriMonth, hijriDay } = value;
-    if (hijriYear == null || hijriMonth == null || hijriDay == null) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Enter the full Hijri date.",
-        path: ["hijriDay"],
-      });
-      return;
-    }
-    if (hijriDay > daysInHijriMonth(hijriYear, hijriMonth)) {
-      ctx.addIssue({
-        code: "custom",
-        message: `That month only has ${daysInHijriMonth(hijriYear, hijriMonth)} days in ${hijriYear}.`,
-        path: ["hijriDay"],
-      });
-    }
-  });
+  .superRefine(checkDateEntry);
 
 export async function createEvent(
   _previous: EventFormState,
@@ -87,19 +47,13 @@ export async function createEvent(
   if (!user) redirect("/login");
 
   const parsed = schema.safeParse({
-    groupId: formData.get("groupId"),
+    groupIds: [...new Set(formData.getAll("groupIds").map(String))],
     title: formData.get("title"),
     type: formData.get("type"),
     notes: formData.get("notes") ?? "",
-    enteredCalendar: formData.get("enteredCalendar"),
-    observedCalendar: formData.get("observedCalendar"),
-    afterSunset: formData.get("afterSunset") === "on",
     recurring: formData.get("recurring") === "on",
-    gregorianDate: formData.get("gregorianDate") ?? undefined,
-    hijriYear: formData.get("hijriYear") || undefined,
-    hijriMonth: formData.get("hijriMonth") || undefined,
-    hijriDay: formData.get("hijriDay") || undefined,
-    personIds: formData.getAll("personIds").map(String),
+    ...readDateEntry(formData),
+    personNames: formData.getAll("personNames").map(String),
     newPeople: formData.get("newPeople") ?? "",
   });
 
@@ -109,71 +63,65 @@ export async function createEvent(
 
   const input = parsed.data;
 
-  // The group id comes from a form field, so it is checked, never trusted.
-  try {
-    await requireMembership(input.groupId);
-  } catch {
-    return { error: "You are not a member of that group." };
+  // The group ids come from form fields, so each one is checked, never trusted.
+  for (const groupId of input.groupIds) {
+    try {
+      await requireMembership(groupId);
+    } catch {
+      return { error: "You are not a member of one of those groups." };
+    }
   }
 
-  // Derive the other calendar's date on the server. The form previews the same
-  // conversion client-side, but the stored value is never taken from the client.
-  const { gregorian, hijri, afterSunset } = deriveDates({
-    enteredCalendar: input.enteredCalendar,
-    gregorianDate: input.gregorianDate,
-    afterSunset: input.afterSunset,
-    hijri:
-      input.enteredCalendar === "HIJRI"
-        ? {
-            year: input.hijriYear!,
-            month: input.hijriMonth!,
-            day: input.hijriDay!,
-          }
-        : undefined,
-  });
+  const { gregorian, hijri, afterSunset } = resolveDateEntry(input);
 
-  const names = (input.newPeople ?? "")
-    .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
+  // Everyone the occasion is about, ticked or typed, once each.
+  const names = new Map<string, string>();
+  for (const name of [
+    ...input.personNames,
+    ...(input.newPeople ?? "").split(",").map((part) => part.trim()),
+  ]) {
+    if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name);
+  }
 
+  // One copy per group, so each group's calendar and roster stay its own: a
+  // later change or delete in one group never reaches into another.
   await prisma.$transaction(async (tx) => {
-    const created = await Promise.all(
-      names.map((name) => tx.person.create({ data: { name, groupId: input.groupId } })),
-    );
+    for (const groupId of input.groupIds) {
+      // Match each name against this group's roster only, adding whoever isn't
+      // on it yet. Nothing from another group's roster is ever attached here.
+      const roster = await tx.person.findMany({
+        where: { groupId },
+        select: { id: true, name: true },
+      });
+      const personIds: string[] = [];
+      for (const [key, name] of names) {
+        const existing = roster.find((person) => person.name.toLowerCase() === key);
+        const person =
+          existing ?? (await tx.person.create({ data: { name, groupId }, select: { id: true } }));
+        personIds.push(person.id);
+      }
 
-    // Only people already on this group's roster may be attached. The ids come
-    // from checkboxes, so a crafted request could otherwise name someone from
-    // another group and leak their name onto this calendar.
-    const existing = await tx.person.findMany({
-      where: { groupId: input.groupId, id: { in: input.personIds } },
-      select: { id: true },
-    });
-
-    const personIds = [
-      ...new Set([...existing.map((p) => p.id), ...created.map((p) => p.id)]),
-    ];
-
-    await tx.event.create({
-      data: {
-        groupId: input.groupId,
-        title: input.title,
-        type: input.type,
-        notes: input.notes || null,
-        observedCalendar: input.observedCalendar,
-        enteredCalendar: input.enteredCalendar,
-        gregorianYear: gregorian.year,
-        gregorianMonth: gregorian.month,
-        gregorianDay: gregorian.day,
-        hijriYear: hijri.year,
-        hijriMonth: hijri.month,
-        hijriDay: hijri.day,
-        afterSunset,
-        recurring: input.recurring,
-        createdById: user.id,
-        people: { create: personIds.map((personId) => ({ personId })) },
-      },
-    });
+      await tx.event.create({
+        data: {
+          groupId,
+          title: input.title,
+          type: input.type,
+          notes: input.notes || null,
+          observedCalendar: input.observedCalendar,
+          enteredCalendar: input.enteredCalendar,
+          gregorianYear: gregorian.year,
+          gregorianMonth: gregorian.month,
+          gregorianDay: gregorian.day,
+          hijriYear: hijri.year,
+          hijriMonth: hijri.month,
+          hijriDay: hijri.day,
+          afterSunset,
+          recurring: input.recurring,
+          createdById: user.id,
+          people: { create: [...new Set(personIds)].map((personId) => ({ personId })) },
+        },
+      });
+    }
   });
 
   revalidatePath("/");
@@ -185,20 +133,25 @@ export async function deleteEvent(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  // Several ids when deleting an occasion shared with more than one group.
+  const ids = [...new Set(formData.getAll("id").map(String).filter(Boolean))];
+  if (ids.length === 0) return;
 
-  // Look the event up first: the id alone says nothing about who may delete it.
-  const event = await prisma.event.findUnique({
-    where: { id },
-    select: { groupId: true },
+  // Look each event up first: an id alone says nothing about who may delete it.
+  const events = await prisma.event.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, groupId: true },
   });
-  if (!event) return;
+  for (const event of events) await requireMembership(event.groupId);
 
-  await requireMembership(event.groupId);
-  await prisma.event.delete({ where: { id } });
+  await prisma.event.deleteMany({ where: { id: { in: events.map((event) => event.id) } } });
 
   revalidatePath("/");
   revalidatePath("/people");
-  redirect("/");
+  revalidatePath("/calendar");
+  for (const groupId of new Set(events.map((event) => event.groupId))) {
+    revalidatePath(`/groups/${groupId}`);
+  }
+  // Back to the page the delete was made from, if it's one of ours.
+  redirect(safeNext(formData.get("returnTo")));
 }

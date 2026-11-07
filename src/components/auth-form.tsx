@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import type { FormState } from "@/app/actions/auth";
-
-const field =
-  "w-full rounded-lg border border-line bg-raised px-3 py-2 text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent/20";
+import { fieldClass, labelClass, primaryButton } from "./form-styles";
+import { Mark } from "./icons";
 
 export function AuthForm({
   mode,
@@ -24,39 +23,63 @@ export function AuthForm({
   const isSignUp = mode === "signup";
 
   return (
-    <div className="mx-auto max-w-sm py-6">
-      <h1
-        className="text-2xl tracking-tight text-ink"
-        style={{ fontFamily: "var(--font-display), serif" }}
-      >
+    <div className="mx-auto max-w-sm py-8 sm:py-14">
+      <Mark className="size-10" />
+      <h1 className="font-display mt-5 text-[2rem] leading-tight font-medium text-ink">
         {isSignUp ? "Join the family list" : "Welcome back"}
       </h1>
-      <p className="mt-1.5 text-sm text-muted">
+      <p className="mt-1.5 text-[0.95rem] text-muted">
         {isSignUp
-          ? "Create an account to add and follow the family's occasions."
+          ? "Create an account to add and follow the family's occasions — in both calendars."
           : "Sign in to see what's coming up."}
       </p>
 
-      <form action={formAction} className="mt-6 space-y-4">
+      <form
+        // Not `action=`: React clears a form after that, and a refused attempt
+        // shouldn't make someone retype everything.
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          startTransition(() => formAction(data));
+        }}
+        className="mt-8 space-y-4"
+      >
         {next && <input type="hidden" name="next" value={next} />}
         {isSignUp && (
-          <div>
-            <label htmlFor="name" className="mb-1.5 block text-sm font-medium">
-              Your name
-            </label>
-            <input
-              id="name"
-              name="name"
-              autoComplete="name"
-              required
-              className={field}
-              placeholder="Fatema"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="firstName" className={labelClass}>
+                First name
+              </label>
+              <input
+                id="firstName"
+                name="firstName"
+                autoComplete="given-name"
+                required
+                maxLength={40}
+                className={fieldClass}
+                placeholder="Fatema"
+              />
+            </div>
+            <div>
+              <label htmlFor="lastName" className={labelClass}>
+                Last name
+              </label>
+              <input
+                id="lastName"
+                name="lastName"
+                autoComplete="family-name"
+                required
+                maxLength={40}
+                className={fieldClass}
+                placeholder="Bombaywala"
+              />
+            </div>
           </div>
         )}
 
         <div>
-          <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="email" className={labelClass}>
             Email
           </label>
           <input
@@ -65,13 +88,13 @@ export function AuthForm({
             type="email"
             autoComplete="email"
             required
-            className={field}
+            className={fieldClass}
             placeholder="you@example.com"
           />
         </div>
 
         <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="password" className={labelClass}>
             Password
           </label>
           <input
@@ -81,25 +104,18 @@ export function AuthForm({
             autoComplete={isSignUp ? "new-password" : "current-password"}
             required
             minLength={isSignUp ? 8 : undefined}
-            className={field}
+            className={fieldClass}
             placeholder={isSignUp ? "At least 8 characters" : ""}
           />
         </div>
 
         {state.error && (
-          <p
-            role="alert"
-            className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger"
-          >
+          <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
             {state.error}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full rounded-lg bg-accent px-4 py-2.5 font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
-        >
+        <button type="submit" disabled={pending} className={`${primaryButton} w-full py-3`}>
           {pending
             ? isSignUp
               ? "Creating account…"
@@ -110,13 +126,13 @@ export function AuthForm({
         </button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-muted">
+      <p className="mt-6 border-t border-line pt-5 text-sm text-muted">
         {isSignUp ? (
           <>
             Already have an account?{" "}
             <Link
               href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
-              className="text-accent-text underline underline-offset-2"
+              className="font-medium text-ink underline underline-offset-2"
             >
               Sign in
             </Link>
@@ -126,7 +142,7 @@ export function AuthForm({
             New here?{" "}
             <Link
               href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
-              className="text-accent-text underline underline-offset-2"
+              className="font-medium text-ink underline underline-offset-2"
             >
               Create an account
             </Link>

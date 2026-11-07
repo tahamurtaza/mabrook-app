@@ -2,7 +2,11 @@ import Link from "next/link";
 import { acceptInvite } from "@/app/actions/groups";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { primaryButton, secondaryButton } from "@/components/form-styles";
+import { Mark } from "@/components/icons";
+import { PersonalDateSummary } from "@/components/personal-dates";
 import { GROUP_TYPE_EMOJI, GROUP_TYPE_LABELS } from "@/lib/occasions/labels";
+import { getPersonalDates } from "@/lib/occasions/personal-dates";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Join a group — Mabrook" };
@@ -31,7 +35,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
         </p>
         <Link
           href="/"
-          className="mt-5 inline-block rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken"
+          className={`mt-5 inline-block ${secondaryButton}`}
         >
           Go to my calendar
         </Link>
@@ -49,10 +53,13 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
       })) !== null
     : false;
 
+  // Only ever the viewer's own dates, for them to choose from.
+  const dates = user && !alreadyMember ? await getPersonalDates(user.id) : [];
+
   return (
     <Shell title="You've been invited">
-      <div className="rounded-xl border border-line bg-raised p-4">
-        <p className="flex items-center gap-2.5 text-lg font-medium text-ink">
+      <div className="border-y border-line py-4">
+        <p className="font-display flex items-center gap-2.5 text-xl font-medium text-ink">
           <span aria-hidden="true">{GROUP_TYPE_EMOJI[group.type]}</span>
           {group.name}
         </p>
@@ -73,13 +80,13 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
           <div className="mt-4 flex gap-2">
             <Link
               href={`/signup?next=${encodeURIComponent(`/invite/${token}`)}`}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className={primaryButton}
             >
               Create an account
             </Link>
             <Link
               href={`/login?next=${encodeURIComponent(`/invite/${token}`)}`}
-              className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-sunken"
+              className={secondaryButton}
             >
               Sign in
             </Link>
@@ -92,17 +99,53 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
           </p>
           <Link
             href={`/groups/${group.id}`}
-            className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            className={`mt-4 inline-block ${primaryButton}`}
           >
             Open the group
           </Link>
         </>
       ) : (
-        <form action={acceptInvite} className="mt-4">
+        <form action={acceptInvite} className="mt-5">
           <input type="hidden" name="token" value={token} />
+
+          {dates.length > 0 ? (
+            <fieldset className="mb-5">
+              <legend className="font-medium text-ink">
+                Share your dates with {group.name}?
+              </legend>
+              <p className="mt-0.5 mb-2.5 text-sm text-muted">
+                Tick the ones you&apos;d like them to see. The rest stay
+                private, and you can change this later.
+              </p>
+              <ul className="space-y-1.5">
+                {dates.map((date) => (
+                  <li key={date.id}>
+                    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-line px-3.5 py-2.5 transition-colors hover:border-line-strong has-checked:border-ink has-checked:bg-surface">
+                      <PersonalDateSummary date={date} />
+                      <input
+                        type="checkbox"
+                        name="shareDateIds"
+                        value={date.id}
+                        className="size-4 shrink-0 accent-[var(--ink)]"
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          ) : (
+            <p className="mb-4 text-sm text-muted">
+              Once you&apos;ve joined, you can add your birthday and other dates in{" "}
+              <Link href="/settings#dates" className="font-medium text-ink underline underline-offset-2">
+                Settings
+              </Link>{" "}
+              and choose what to share.
+            </p>
+          )}
+
           <button
             type="submit"
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            className={primaryButton}
           >
             Join {group.name}
           </button>
@@ -124,11 +167,9 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-md py-6">
-      <h1
-        className="mb-4 text-2xl tracking-tight text-ink"
-        style={{ fontFamily: "var(--font-display), serif" }}
-      >
+    <div className="mx-auto max-w-md py-8 sm:py-14">
+      <Mark className="size-10" />
+      <h1 className="font-display mt-5 mb-4 text-[2rem] leading-tight font-medium text-ink">
         {title}
       </h1>
       {children}

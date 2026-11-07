@@ -1,4 +1,5 @@
 import {
+  addDays,
   fromISODate,
   gregorianToHijri,
   hijriToGregorian,
@@ -13,7 +14,11 @@ export interface DateEntry {
   gregorianDate?: string;
   /** When entering a Hijri date. */
   hijri?: HijriDate;
-  /** Only meaningful when entering a Gregorian date. */
+  /**
+   * Gregorian entry: it happened after Maghrib, so the Hijri date is the next
+   * one. Hijri entry: it happened in that Hijri day's evening — between Maghrib
+   * and midnight — so the Gregorian date is the one before.
+   */
   afterSunset?: boolean;
 }
 
@@ -43,11 +48,17 @@ export function deriveDates(entry: DateEntry): DerivedDates {
     throw new Error("A Hijri date is required when entering one.");
   }
 
-  // A Hijri date already names the day, since the Hijri day is what begins at
-  // sunset. There is no sunset question to ask, so the flag stays false.
+  // A Hijri day runs from Maghrib to Maghrib, so it covers two Gregorian dates:
+  // the evening of one and the daylight of the next. `hijriToGregorian` gives
+  // the daylight one. An occasion in the evening part — after Maghrib but
+  // before midnight — was on the Gregorian day before, and is exactly the
+  // "after sunset" case seen from the other side: that Gregorian date plus the
+  // flag converts straight back to the Hijri date that was entered.
+  const daytime = hijriToGregorian(entry.hijri);
+  const evening = entry.afterSunset ?? false;
   return {
-    gregorian: hijriToGregorian(entry.hijri),
+    gregorian: evening ? addDays(daytime, -1) : daytime,
     hijri: entry.hijri,
-    afterSunset: false,
+    afterSunset: evening,
   };
 }

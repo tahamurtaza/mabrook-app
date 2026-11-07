@@ -39,7 +39,7 @@ describe("Gregorian-observed occasions", () => {
       day: 9,
     });
     expect(formatGregorian(result.gregorian)).toBe("14 Nov 2026");
-    expect(result.yearsCompleted).toBe(18);
+    expect(result.years.gregorian).toBe(18);
     expect(result.daysAway).toBe(97);
   });
 
@@ -50,7 +50,7 @@ describe("Gregorian-observed occasions", () => {
       day: 15,
     });
     expect(formatGregorian(result.gregorian)).toBe("14 Nov 2027");
-    expect(result.yearsCompleted).toBe(19);
+    expect(result.years.gregorian).toBe(19);
   });
 
   it("counts the birthday itself as today, not as passed", () => {
@@ -60,7 +60,7 @@ describe("Gregorian-observed occasions", () => {
       day: 14,
     });
     expect(result.daysAway).toBe(0);
-    expect(result.yearsCompleted).toBe(18);
+    expect(result.years.gregorian).toBe(18);
     expect(describeDaysAway(result.daysAway)).toBe("Today");
   });
 
@@ -101,7 +101,9 @@ describe("Hijri-observed occasions", () => {
       day: 9,
     });
     expect(formatHijri(result.hijri)).toBe("17 Zilqadah 1448");
-    expect(result.yearsCompleted).toBe(19);
+    expect(result.years.hijri).toBe(19);
+    // A Hijri-anchored turn counts only in Hijri years.
+    expect(result.years.gregorian).toBeNull();
   });
 
   it("drifts about eleven days earlier each Gregorian year", () => {
@@ -126,12 +128,12 @@ describe("Hijri-observed occasions", () => {
       year: 2026,
       month: 8,
       day: 9,
-    }).yearsCompleted;
+    }).years.gregorian;
     const hijriAge = nextOccurrence(hijriBirthday, {
       year: 2026,
       month: 8,
       day: 9,
-    }).yearsCompleted;
+    }).years.hijri;
     expect(hijriAge).toBe((gregorianAge ?? 0) + 1);
   });
 
@@ -167,13 +169,107 @@ describe("Hijri-observed occasions", () => {
   });
 });
 
+describe("occasions observed by both calendars", () => {
+  const both = occasion(BIRTHDAY, { observedCalendar: "BOTH" });
+
+  it("comes round twice a year", () => {
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 8, day: 9 },
+      { year: 2027, month: 8, day: 8 },
+    );
+    expect(all.length).toBe(2);
+  });
+
+  it("keeps the Gregorian date fixed and lets the Hijri one drift", () => {
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 8, day: 9 },
+      { year: 2027, month: 8, day: 8 },
+    );
+
+    const gregorianTurn = all.find((o) => o.anchor === "GREGORIAN")!;
+    const hijriTurn = all.find((o) => o.anchor === "HIJRI")!;
+
+    expect(formatGregorian(gregorianTurn.gregorian)).toBe("14 Nov 2026");
+    expect(formatHijri(hijriTurn.hijri)).toBe("17 Zilqadah 1448");
+  });
+
+  it("reports the right age for each anchor", () => {
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 8, day: 9 },
+      { year: 2027, month: 8, day: 8 },
+    );
+
+    const gregorianTurn = all.find((o) => o.anchor === "GREGORIAN")!;
+    const hijriTurn = all.find((o) => o.anchor === "HIJRI")!;
+
+    expect(gregorianTurn.years.gregorian).toBe(18);
+    expect(hijriTurn.years.hijri).toBe(19);
+  });
+
+  it("nextOccurrence returns whichever anniversary is sooner", () => {
+    const soonest = nextOccurrence(both, { year: 2026, month: 8, day: 9 });
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 8, day: 9 },
+      { year: 2027, month: 8, day: 8 },
+    );
+    expect(soonest.daysAway).toBe(Math.min(...all.map((o) => o.daysAway)));
+  });
+
+  it("sorts the merged list soonest first", () => {
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 1, day: 1 },
+      { year: 2029, month: 12, day: 31 },
+    );
+    const days = all.map((o) => o.daysAway);
+    expect(days).toEqual([...days].sort((a, b) => a - b));
+  });
+
+  it("shows one row, not two, when the two anniversaries coincide", () => {
+    // The Gregorian and Hijri anniversaries realign roughly every 33 years.
+    // Find the year they collide and check it reads as a single occurrence.
+    const all = occurrencesBetween(
+      both,
+      { year: 2008, month: 11, day: 14 },
+      { year: 2060, month: 12, day: 31 },
+    );
+
+    const keys = all.map(
+      (o) => `${o.gregorian.year}-${o.gregorian.month}-${o.gregorian.day}`,
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+
+    const coincidences = all.filter((o) => o.anchor === "BOTH");
+    expect(coincidences.length).toBeGreaterThan(0);
+    for (const hit of coincidences) {
+      expect(hit.years.gregorian).not.toBeNull();
+      expect(hit.years.hijri).not.toBeNull();
+    }
+  });
+
+  it("still yields both anchors when only one is in the window", () => {
+    // A two-week window that contains the Gregorian turn but not the Hijri one.
+    const all = occurrencesBetween(
+      both,
+      { year: 2026, month: 11, day: 10 },
+      { year: 2026, month: 11, day: 20 },
+    );
+    expect(all.length).toBe(1);
+    expect(all[0].anchor).toBe("GREGORIAN");
+  });
+});
+
 describe("non-recurring occasions", () => {
   it("returns its single date and no age", () => {
     const moved = occasion({ year: 2024, month: 6, day: 1 }, { recurring: false });
     const result = nextOccurrence(moved, { year: 2026, month: 8, day: 9 });
     expect(formatGregorian(result.gregorian)).toBe("1 Jun 2024");
     expect(result.daysAway).toBeLessThan(0);
-    expect(result.yearsCompleted).toBeNull();
+    expect(result.years.gregorian).toBeNull();
   });
 });
 

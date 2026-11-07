@@ -4,8 +4,9 @@
  * The whole point of the app lives here: two occasions on the same list can
  * recur on two different clocks. A Gregorian birthday returns to the same 14
  * November every year. A Hijri birthday returns to the same 17 Zilqadah, which
- * lands about eleven days earlier each Gregorian year. To build one merged
- * "upcoming" list we project every occasion forward onto a Gregorian day.
+ * lands about eleven days earlier each Gregorian year. An occasion observed by
+ * both comes round twice a year, on each. To build one merged "upcoming" list
+ * we project every occasion forward onto a Gregorian day.
  */
 
 import {
@@ -17,11 +18,15 @@ import {
   type HijriDate,
 } from "@/lib/hijri/hijri";
 
+/** Which calendar a date was typed in. */
 export type CalendarSystem = "GREGORIAN" | "HIJRI";
+
+/** Which calendar an anniversary is counted in. */
+export type ObservedCalendar = CalendarSystem | "BOTH";
 
 /** The stored shape an occurrence is computed from. */
 export interface RecurringOccasion {
-  observedCalendar: CalendarSystem;
+  observedCalendar: ObservedCalendar;
   gregorianYear: number;
   gregorianMonth: number;
   gregorianDay: number;
@@ -39,11 +44,16 @@ export interface Occurrence {
   /** Whole days from the reference date; 0 is today, negative is past. */
   daysAway: number;
   /**
-   * How many years the occasion completes, counted in its observed calendar —
-   * the age on a birthday. Null when the original year is unknown or the
-   * occasion does not recur.
+   * Why this occurrence exists — which calendar's anniversary it is. `BOTH` on
+   * the roughly once-in-33-years occasions where the two land on the same day.
    */
-  yearsCompleted: number | null;
+  anchor: ObservedCalendar;
+  /**
+   * How many years the occasion completes in each calendar — the age on a
+   * birthday. Only the anchor's count is meaningful; the other is null unless
+   * the anchor is `BOTH`. Null throughout for a non-recurring occasion.
+   */
+  years: { gregorian: number | null; hijri: number | null };
   /**
    * True when the stored day does not exist in the target year and we had to
    * move it: 29 February in a common year, or 30 Zilhaj outside a Kabisa year.
@@ -101,12 +111,109 @@ function inHijriYear(
   };
 }
 
+/** The next turn of one anchor, ignoring any other the occasion may have. */
+function nextForAnchor(
+  occasion: RecurringOccasion,
+  from: GregorianDate,
+  anchor: CalendarSystem,
+): Occurrence {
+  if (anchor === "GREGORIAN") {
+    let candidate = inGregorianYear(
+      from.year,
+      occasion.gregorianMonth,
+      occasion.gregorianDay,
+    );
+    if (compareParts(candidate.date, from) < 0) {
+      candidate = inGregorianYear(
+        from.year + 1,
+        occasion.gregorianMonth,
+        occasion.gregorianDay,
+      );
+    }
+
+    return {
+      gregorian: candidate.date,
+      hijri: gregorianToHijri(candidate.date),
+      daysAway: daysBetween(from, candidate.date),
+      anchor: "GREGORIAN",
+      years: {
+        gregorian: candidate.date.year - occasion.gregorianYear,
+        hijri: null,
+      },
+      adjusted: candidate.adjusted,
+    };
+  }
+
+  // Hijri-anchored: step through Hijri years, not Gregorian ones.
+  const today = gregorianToHijri(from);
+  let candidate = inHijriYear(today.year, occasion.hijriMonth, occasion.hijriDay);
+  if (compareParts(candidate.date, today) < 0) {
+    candidate = inHijriYear(
+      today.year + 1,
+      occasion.hijriMonth,
+      occasion.hijriDay,
+    );
+  }
+
+  const gregorian = hijriToGregorian(candidate.date);
+  return {
+    gregorian,
+    hijri: candidate.date,
+    daysAway: daysBetween(from, gregorian),
+    anchor: "HIJRI",
+    years: { gregorian: null, hijri: candidate.date.year - occasion.hijriYear },
+    adjusted: candidate.adjusted,
+  };
+}
+
+/** The anchors an occasion recurs on. */
+function anchorsOf(occasion: RecurringOccasion): CalendarSystem[] {
+  if (occasion.observedCalendar === "BOTH") return ["GREGORIAN", "HIJRI"];
+  return [occasion.observedCalendar];
+}
+
+/**
+ * Fold two occurrences that landed on the same Gregorian day into one row.
+ *
+ * For an occasion observed by both calendars this happens roughly once every 33
+ * years, when the Gregorian and Hijri anniversaries realign. Without this the
+ * list would show the same birthday twice on the same day, which reads as a bug.
+ */
+function mergeSameDay(occurrences: Occurrence[]): Occurrence[] {
+  const byDay = new Map<string, Occurrence>();
+
+  for (const occurrence of occurrences) {
+    const { year, month, day } = occurrence.gregorian;
+    const key = `${year}-${month}-${day}`;
+    const existing = byDay.get(key);
+
+    if (!existing) {
+      byDay.set(key, occurrence);
+      continue;
+    }
+
+    byDay.set(key, {
+      ...existing,
+      anchor: existing.anchor === occurrence.anchor ? existing.anchor : "BOTH",
+      years: {
+        gregorian: existing.years.gregorian ?? occurrence.years.gregorian,
+        hijri: existing.years.hijri ?? occurrence.years.hijri,
+      },
+      adjusted: existing.adjusted || occurrence.adjusted,
+    });
+  }
+
+  return [...byDay.values()];
+}
+
 /**
  * The next time this occasion comes round on or after `from`.
  *
+ * When it is observed by both calendars this is whichever anniversary arrives
+ * first. Use `occurrencesBetween` to get them all.
+ *
  * A non-recurring occasion returns its single date, which may be in the past;
- * callers filter those out. `from` defaults to nothing — pass today explicitly
- * so the result is deterministic and testable.
+ * callers filter those out.
  */
 export function nextOccurrence(
   occasion: RecurringOccasion,
@@ -126,87 +233,58 @@ export function nextOccurrence(
         day: occasion.hijriDay,
       },
       daysAway: daysBetween(from, gregorian),
-      yearsCompleted: null,
+      anchor: occasion.observedCalendar,
+      years: { gregorian: null, hijri: null },
       adjusted: false,
     };
   }
 
-  if (occasion.observedCalendar === "GREGORIAN") {
-    // Try this Gregorian year; if it has already passed, take the next.
-    let candidate = inGregorianYear(
-      from.year,
-      occasion.gregorianMonth,
-      occasion.gregorianDay,
-    );
-    if (compareParts(candidate.date, from) < 0) {
-      candidate = inGregorianYear(
-        from.year + 1,
-        occasion.gregorianMonth,
-        occasion.gregorianDay,
-      );
-    }
-
-    return {
-      gregorian: candidate.date,
-      hijri: gregorianToHijri(candidate.date),
-      daysAway: daysBetween(from, candidate.date),
-      yearsCompleted: candidate.date.year - occasion.gregorianYear,
-      adjusted: candidate.adjusted,
-    };
-  }
-
-  // Hijri-observed: step through Hijri years, not Gregorian ones.
-  const today = gregorianToHijri(from);
-  let candidate = inHijriYear(
-    today.year,
-    occasion.hijriMonth,
-    occasion.hijriDay,
+  const candidates = mergeSameDay(
+    anchorsOf(occasion).map((anchor) => nextForAnchor(occasion, from, anchor)),
   );
-  if (compareParts(candidate.date, today) < 0) {
-    candidate = inHijriYear(
-      today.year + 1,
-      occasion.hijriMonth,
-      occasion.hijriDay,
-    );
-  }
 
-  const gregorian = hijriToGregorian(candidate.date);
-  return {
-    gregorian,
-    hijri: candidate.date,
-    daysAway: daysBetween(from, gregorian),
-    yearsCompleted: candidate.date.year - occasion.hijriYear,
-    adjusted: candidate.adjusted,
-  };
+  return candidates.reduce((soonest, candidate) =>
+    candidate.daysAway < soonest.daysAway ? candidate : soonest,
+  );
 }
 
 /**
- * Every time this occasion comes round within the window, so a Hijri occasion
- * that lands twice in one Gregorian year shows up twice.
+ * Every time this occasion comes round within the window.
+ *
+ * A Hijri occasion can land twice in one Gregorian year; an occasion observed
+ * by both calendars lands about twice as often again.
  */
 export function occurrencesBetween(
   occasion: RecurringOccasion,
   from: GregorianDate,
   to: GregorianDate,
 ): Occurrence[] {
-  const results: Occurrence[] = [];
-  let cursor = from;
-
-  // A Hijri year is ~354 days, so at most one occurrence per ~354-day step.
-  // Guard the loop on the window length rather than trusting the data.
   const windowDays = daysBetween(from, to);
-  if (windowDays < 0) return results;
-  const maxOccurrences = Math.floor(windowDays / 300) + 2;
+  if (windowDays < 0) return [];
 
-  for (let i = 0; i < maxOccurrences; i += 1) {
-    const occurrence = nextOccurrence(occasion, cursor);
-    if (daysBetween(from, occurrence.gregorian) > windowDays) break;
-    results.push({ ...occurrence, daysAway: daysBetween(from, occurrence.gregorian) });
-    if (!occasion.recurring) break;
-    cursor = addOneDay(occurrence.gregorian);
+  if (!occasion.recurring) {
+    const only = nextOccurrence(occasion, from);
+    return only.daysAway >= 0 && only.daysAway <= windowDays ? [only] : [];
   }
 
-  return results;
+  const results: Occurrence[] = [];
+
+  // Walk each anchor independently, then merge. A Hijri year is ~354 days, so
+  // the step count is bounded by the window rather than by trusting the data.
+  for (const anchor of anchorsOf(occasion)) {
+    let cursor = from;
+    const maxSteps = Math.floor(windowDays / 300) + 2;
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const occurrence = nextForAnchor(occasion, cursor, anchor);
+      const away = daysBetween(from, occurrence.gregorian);
+      if (away > windowDays) break;
+      results.push({ ...occurrence, daysAway: away });
+      cursor = addOneDay(occurrence.gregorian);
+    }
+  }
+
+  return mergeSameDay(results).sort((a, b) => a.daysAway - b.daysAway);
 }
 
 function addOneDay(date: GregorianDate): GregorianDate {

@@ -1,24 +1,34 @@
 import type { EventType, GroupType } from "@/generated/prisma";
 import { prisma } from "@/lib/db";
 import { getMyGroupIds, requireMembership } from "@/lib/groups/access";
-import { addDays, type GregorianDate } from "@/lib/hijri/hijri";
+import { addDays, daysBetween, type GregorianDate } from "@/lib/hijri/hijri";
 import { today } from "@/lib/today";
 import {
   bySoonest,
   nextOccurrence,
   occurrencesBetween,
-  type CalendarSystem,
+  type ObservedCalendar,
   type Occurrence,
 } from "./occurrence";
 
 export interface UpcomingOccasion {
+  /** The first copy's id. See `ids` for an occasion shared to several groups. */
   id: string;
+  /**
+   * Every stored copy of this occasion. An occasion shared with several groups
+   * is saved once per group (so each group's calendar stays its own), and the
+   * merged views fold the copies back into one row.
+   */
+  ids: string[];
   title: string;
   type: EventType;
   notes: string | null;
-  observedCalendar: CalendarSystem;
+  observedCalendar: ObservedCalendar;
   afterSunset: boolean;
+  recurring: boolean;
+  /** The first group it's in. See `groups` for all of them. */
   group: { id: string; name: string; type: GroupType };
+  groups: { id: string; name: string; type: GroupType }[];
   /** The original date, for "since 2008" style captions. */
   origin: {
     gregorian: GregorianDate;
@@ -42,12 +52,15 @@ type EventRow = Awaited<
 function toOccasion(event: EventRow, occurrence: Occurrence): UpcomingOccasion {
   return {
     id: event.id,
+    ids: [event.id],
     title: event.title,
     type: event.type,
     notes: event.notes,
     observedCalendar: event.observedCalendar,
     afterSunset: event.afterSunset,
+    recurring: event.recurring,
     group: event.group,
+    groups: [event.group],
     origin: {
       gregorian: {
         year: event.gregorianYear,
@@ -67,6 +80,49 @@ function toOccasion(event: EventRow, occurrence: Occurrence): UpcomingOccasion {
     })),
     occurrence,
   };
+}
+
+/**
+ * Fold copies of one occasion shared across several groups into a single row.
+ *
+ * Copies are recognised by what makes them the same occasion — title, type,
+ * original date and calendar — landing on the same day. Only groups the user
+ * can read are ever loaded, so the merged row can't name a group they aren't in.
+ */
+export function mergeShared(occasions: UpcomingOccasion[]): UpcomingOccasion[] {
+  const merged = new Map<string, UpcomingOccasion>();
+
+  for (const occasion of occasions) {
+    const { gregorian, hijri } = occasion.origin;
+    const turn = occasion.occurrence.gregorian;
+    const key = [
+      occasion.title.trim().toLowerCase(),
+      occasion.type,
+      occasion.observedCalendar,
+      occasion.recurring,
+      `${gregorian.year}-${gregorian.month}-${gregorian.day}`,
+      `${hijri.year}-${hijri.month}-${hijri.day}`,
+      `${turn.year}-${turn.month}-${turn.day}`,
+    ].join("|");
+
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...occasion, ids: [...occasion.ids], groups: [...occasion.groups] });
+      continue;
+    }
+
+    existing.ids.push(...occasion.ids);
+    existing.groups.push(...occasion.groups);
+    existing.notes ??= occasion.notes;
+    for (const person of occasion.people) {
+      const known = existing.people.some(
+        (candidate) => candidate.name.toLowerCase() === person.name.toLowerCase(),
+      );
+      if (!known) existing.people.push(person);
+    }
+  }
+
+  return [...merged.values()];
 }
 
 /**
@@ -109,13 +165,48 @@ export async function getUpcoming({
     include: eventInclude,
   });
 
-  return events
-    .flatMap((event) =>
+  return mergeShared(
+    events.flatMap((event) =>
       occurrencesBetween(event, from, addDays(from, withinDays))
         .filter((occurrence) => occurrence.daysAway >= 0)
         .map((occurrence) => toOccasion(event, occurrence)),
-    )
-    .sort(bySoonest);
+    ),
+  ).sort(bySoonest);
+}
+
+/**
+ * Every turn of every visible occasion between two days, inclusive — what a
+ * calendar page or a "recently" list needs. `daysAway` is measured from today,
+ * not from `from`, so past turns come back negative.
+ */
+export async function getOccasionsBetween({
+  groupId = null,
+  from,
+  to,
+}: {
+  groupId?: string | null;
+  from: GregorianDate;
+  to: GregorianDate;
+}): Promise<UpcomingOccasion[]> {
+  const groupIds = await readableGroupIds(groupId);
+  if (groupIds.length === 0) return [];
+
+  const events = await prisma.event.findMany({
+    where: { groupId: { in: groupIds } },
+    include: eventInclude,
+  });
+
+  const now = today();
+  return mergeShared(
+    events.flatMap((event) =>
+      occurrencesBetween(event, from, to).map((occurrence) =>
+        toOccasion(event, {
+          ...occurrence,
+          daysAway: daysBetween(now, occurrence.gregorian),
+        }),
+      ),
+    ),
+  ).sort(bySoonest);
 }
 
 /** Every occasion in a group, each at its next turn. */

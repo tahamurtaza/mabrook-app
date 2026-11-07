@@ -12,6 +12,8 @@ import {
   requireGroupAdmin,
   requireMembership,
 } from "@/lib/groups/access";
+import { shareDates, unshareAllDates } from "@/lib/occasions/personal-dates";
+import { findMyEntries } from "@/lib/people/roster";
 
 export interface GroupFormState {
   error?: string;
@@ -133,8 +135,18 @@ export async function acceptInvite(formData: FormData): Promise<void> {
     })
     .catch(() => {});
 
+  // Only what they ticked on the invite page, and only dates that are theirs.
+  await shareDates({
+    user,
+    groupId: invite.groupId,
+    dateIds: formData.getAll("shareDateIds").map(String),
+  });
+
   revalidatePath("/");
-  redirect(`/groups/${invite.groupId}`);
+
+  // They may already be on this group's list; ask before showing it to them.
+  const matches = await findMyEntries(user, invite.groupId);
+  redirect(`/groups/${invite.groupId}${matches.length > 0 ? "/claim" : ""}`);
 }
 
 export async function leaveGroup(formData: FormData): Promise<void> {
@@ -159,6 +171,7 @@ export async function leaveGroup(formData: FormData): Promise<void> {
   await prisma.groupMember.delete({
     where: { groupId_userId: { groupId, userId: user.id } },
   });
+  await unshareAllDates(user.id, groupId);
 
   revalidatePath("/");
   redirect("/groups");
@@ -201,6 +214,7 @@ export async function removeMember(formData: FormData): Promise<void> {
   await prisma.groupMember.delete({
     where: { groupId_userId: { groupId, userId } },
   });
+  await unshareAllDates(userId, groupId);
 
   revalidatePath(`/groups/${groupId}`);
 }

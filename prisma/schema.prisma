@@ -17,15 +17,24 @@ datasource db {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  /// The full name, which is what the rest of the app reads. Kept in step with
+  /// the two below by `fullName`.
   name         String
+  firstName    String
+  /// Required at signup. Null only on accounts older than the field.
+  lastName     String?
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  /// When the first-run guide was finished or skipped; null until then.
+  tourCompletedAt DateTime?
 
   sessions       Session[]
   createdEvents  Event[]       @relation("EventCreatedBy")
   memberships    GroupMember[]
   createdInvites Invite[]      @relation("InviteCreatedBy")
+  personalDates  PersonalDate[]
 
   /// The roster entries this login is linked to, at most one per group.
   people Person[]
@@ -142,6 +151,10 @@ model Person {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  /// The name this entry had before someone said "that's me" and linked their
+  /// account to it. Only set while so linked, and what lets it be undone.
+  claimedName String?
+
   events EventPerson[]
 
   @@unique([groupId, userId])
@@ -166,9 +179,18 @@ enum EventType {
   OTHER
 }
 
+/// Which calendar a date was typed in. A date is always one or the other.
 enum CalendarSystem {
   GREGORIAN
   HIJRI
+}
+
+/// Which calendar an anniversary is counted in. `BOTH` means the occasion comes
+/// round twice a year — once on its Gregorian date and once on its Hijri one.
+enum ObservedCalendar {
+  GREGORIAN
+  HIJRI
+  BOTH
 }
 
 /// One occasion, stored with its absolute date in *both* calendars.
@@ -192,8 +214,9 @@ model Event {
   groupId String
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  /// Which calendar this occasion's anniversary is counted in.
-  observedCalendar CalendarSystem @default(GREGORIAN)
+  /// Which calendar this occasion's anniversary is counted in. `BOTH` puts it
+  /// on the calendar twice a year.
+  observedCalendar ObservedCalendar @default(GREGORIAN)
 
   /// Which calendar the date was originally entered in; the other is derived.
   enteredCalendar CalendarSystem @default(GREGORIAN)
@@ -220,6 +243,15 @@ model Event {
   createdById String?
   createdBy   User?   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
+  /// Set when this is a group's copy of someone's own date, shared by them.
+  /// Deleting the date takes every copy with it.
+  personalDateId String?
+  personalDate   PersonalDate? @relation(fields: [personalDateId], references: [id], onDelete: Cascade)
+
+  /// The group had this before it was joined to someone's date, so it outlives
+  /// that link: undoing it or leaving the group hands it back to the group.
+  adopted Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -227,7 +259,44 @@ model Event {
   @@index([observedCalendar, gregorianMonth, gregorianDay])
   @@index([observedCalendar, hijriMonth, hijriDay])
   @@index([createdById])
+  @@unique([groupId, personalDateId])
+  @@index([personalDateId])
   @@map("events")
+}
+
+/// A date that belongs to a person rather than a group: their birthday, their
+/// anniversary. Private to them until they choose to share it, which puts a
+/// copy on that group's calendar as an `Event`.
+model PersonalDate {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type EventType @default(OTHER)
+  /// Their own words for it; only used for `OTHER`.
+  label String?
+
+  observedCalendar ObservedCalendar @default(GREGORIAN)
+  enteredCalendar  CalendarSystem   @default(GREGORIAN)
+
+  gregorianYear  Int
+  gregorianMonth Int /// 1-12
+  gregorianDay   Int /// 1-31
+
+  hijriYear  Int
+  hijriMonth Int /// 0-11, 0 = Moharram
+  hijriDay   Int /// 1-30
+
+  afterSunset Boolean @default(false)
+
+  /// The group copies of this date.
+  events Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("personal_dates")
 }
 
 /// Links an occasion to the people it is about — an anniversary has two.

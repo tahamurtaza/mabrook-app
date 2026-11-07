@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -8,6 +8,8 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    // Not `env()`, which throws: `prisma generate` runs during the build and
+    // needs no database, and the commands that do will say so themselves.
+    url: process.env.DATABASE_URL ?? "",
   },
 });

@@ -1,4 +1,5 @@
 import type { EventType, GroupRole, GroupType } from "@/generated/prisma";
+import type { ObservedCalendar, Occurrence } from "./occurrence";
 
 export const GROUP_TYPE_LABELS: Record<GroupType, string> = {
   FAMILY: "Family",
@@ -74,12 +75,50 @@ export const EVENT_TYPE_ORDER: EventType[] = [
   "OTHER",
 ];
 
+export const OBSERVED_CALENDAR_LABELS: Record<ObservedCalendar, string> = {
+  GREGORIAN: "Gregorian",
+  HIJRI: "Hijri",
+  BOTH: "both calendars",
+};
+
+/** What someone calls one of their own dates: "Birthday", "Our first home". */
+export function personalDateLabel(date: { type: EventType; label: string | null }): string {
+  return date.label || EVENT_TYPE_LABELS[date.type];
+}
+
+/** The title a personal date takes on a group's calendar, where it needs a name. */
+export function personalDateTitle(
+  name: string,
+  date: { type: EventType; label: string | null },
+): string {
+  if (date.type === "OTHER") return date.label ? `${name}: ${date.label}` : `${name}'s occasion`;
+  if (date.type === "SCHOOL_START") return `${name} started school`;
+  return `${name}'s ${EVENT_TYPE_LABELS[date.type].toLowerCase()}`;
+}
+
 /**
  * How to word the count of years for each type. A birthday gives an age; an
  * anniversary gives an ordinal.
+ *
+ * Counts are per calendar, and they differ — a Hijri year is ~11 days shorter,
+ * so someone turning 18 by the Gregorian calendar is turning 19 by the Hijri
+ * one. On an occurrence anchored to both, both are worth showing.
  */
-export function describeYears(type: EventType, years: number | null): string | null {
+export function describeYears(
+  type: EventType,
+  occurrence: Pick<Occurrence, "anchor" | "years">,
+): string | null {
+  const { gregorian, hijri } = occurrence.years;
+
+  if (occurrence.anchor === "BOTH" && gregorian && hijri && gregorian > 0) {
+    return type === "BIRTHDAY"
+      ? `Turning ${gregorian} · ${hijri} Hijri`
+      : `${ordinal(gregorian)} year · ${ordinal(hijri)} Hijri`;
+  }
+
+  const years = occurrence.anchor === "HIJRI" ? hijri : gregorian;
   if (years === null || years <= 0) return null;
+
   if (type === "BIRTHDAY") return `Turning ${years}`;
   return `${ordinal(years)} year`;
 }

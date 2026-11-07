@@ -1,12 +1,19 @@
 # Mabrook
 
-A shared family calendar of birthdays, anniversaries and milestones, kept in
-both the Gregorian and the Dawoodi Bohra Hijri calendars.
+A shared calendar of birthdays, anniversaries and milestones, kept in both the
+Gregorian and the Dawoodi Bohra Hijri calendars.
 
 Every occasion stores an absolute date in *both* calendars, and records which
-one the family counts the anniversary in. So one person's birthday can come
+one the group counts the anniversary in. So one person's birthday can come
 round every 14 November while their brother's comes round every 17 Zilqadah —
 and both appear, correctly ordered, in one upcoming list.
+
+An occasion can also be observed by **both**, in which case it comes round twice
+a year — once on each calendar.
+
+Occasions live in **groups** — a family, a circle of friends, a school year.
+You join a group through an invite link, and see a merged calendar across every
+group you're in, each row labelled with where it came from.
 
 ## Getting started
 
@@ -34,12 +41,47 @@ production uses Railway's Postgres and nothing outside `scripts/` imports it.
 | `npm run dev` | Development server |
 | `npm run build` | Generate the Prisma client and build |
 | `npm test` | Unit tests for the calendar maths |
+| `npm run test:smoke` | End-to-end checks, including the group boundary (needs a running server) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:local` | Local Postgres (PGlite), foreground |
 | `npm run db:migrate` | Create a migration from schema changes |
 | `npm run db:deploy` | Apply pending migrations |
 | `npm run db:seed` | Reset and reseed demo data |
 | `npm run db:studio` | Prisma Studio |
+
+## Groups, invites and who can see what
+
+A group owns its calendar and its own roster of people. Rosters are
+deliberately **per-group**: the same human in your family group and in a
+friends group is two rows, so no group can ever enumerate another's members.
+
+Joining is by **shareable link**. The `createInvite` action mints a token from
+`randomBytes(32)` — the token *is* the secret in the URL, so it's generated
+from a CSPRNG rather than a guessable cuid. Links are multi-use on purpose (one
+link in a family chat lets everyone join) and stop working after 7 days or when
+revoked. Roles are `OWNER`, `ADMIN` and `MEMBER`; only the first two can invite,
+remove members or revoke links.
+
+Every read and write of an occasion or a person goes through
+[`src/lib/groups/access.ts`](src/lib/groups/access.ts). Nothing else builds a
+`groupId` filter by hand — if a query can't name the group it's allowed to
+touch, it doesn't run. Concretely:
+
+- `?group=` on the calendar is *checked*, not trusted, so a guessed id gets you
+  nothing.
+- A group page you aren't in returns 404, not 403 — "no such group" and "not
+  your group" are deliberately indistinguishable.
+- An occasion can be shared with several groups at once. It is saved as one
+  copy per group, after checking membership of every group named, and people
+  are matched by name against each group's own roster (or added to it) — no
+  person row is ever attached across a group boundary. The merged views fold
+  the copies back into one row labelled with all its groups.
+- Deleting an occasion looks the row up and checks membership first; the id
+  alone says nothing about who may delete it.
+- `?next=` after login only accepts same-site paths, so an invite-shaped link
+  can't bounce someone off-site.
+
+`npm run test:smoke` asserts all of the above against a running server.
 
 ## How the calendar works
 
@@ -73,8 +115,65 @@ stored on the event as `afterSunset` so the conversion can always be redone:
 - 14 Nov 2008, morning → **17 Zilqadah 1429**
 - 14 Nov 2008, evening → **18 Zilqadah 1429**
 
-The question is only asked when entering a Gregorian date. A Hijri date already
-names the day, so there is nothing to disambiguate.
+The same question is asked, the other way round, when entering a Hijri date.
+A Hijri day runs from Maghrib to Maghrib, so it covers the evening of one
+Gregorian date and the daylight of the next. Something on the night of a Hijri
+date, before midnight, has the *earlier* Gregorian date — and is stored as that
+date with `afterSunset` set, which converts straight back to the Hijri date
+entered:
+
+- 17 Zilqadah 1429, daytime or after midnight → **14 Nov 2008**
+- 17 Zilqadah 1429, the night before, until midnight → **13 Nov 2008**, evening
+
+### Your own dates
+
+A person's own dates (`PersonalDate`) belong to their account, not to a group.
+They're asked for at signup, on `/welcome`, and managed on `/settings`. A date is
+private until its owner shares it: on the invite page when joining, where
+nothing is ticked by default, or per group in Settings. Sharing puts a copy on that
+group's calendar as an `Event` linked back through `personalDateId`, so
+un-sharing, deleting the date or leaving the group all remove the copy, and
+editing the date updates every copy.
+
+### Someone already on the list
+
+A person can be added to a group's list by name before they ever join, which
+would otherwise leave them on it twice. So after joining, anyone who might
+already be there is asked "Is one of these you?" (`/groups/[id]/claim`), matched
+by a similar name or a shared birthday in
+[`src/lib/people/matching.ts`](src/lib/people/matching.ts). Nothing merges without
+that answer. Saying yes links their account to the existing entry and takes
+effect at once; the entry's old name is kept in `claimedName`, and occasions
+joined to one of their own dates are marked `adopted`, so an owner, an admin or
+they themselves can undo it exactly. Owners and admins can also merge two
+entries by hand.
+
+### Occasions on the same day
+
+Two occasions landing on one day are never reduced to a single row. Anything
+answering "what's next?" uses `soonestDay` in
+[`src/lib/occasions/same-day.ts`](src/lib/occasions/same-day.ts), which returns
+the whole day, and lists, calendar cells and the day panel mark the clash in
+plum, a colour kept for this alone.
+
+### Observing both calendars
+
+`observedCalendar` can be `GREGORIAN`, `HIJRI` or `BOTH`. With `BOTH` the
+occasion has two anchors and appears twice a year. Taha's birthday, in the seed:
+
+| Falls on | Hijri | Anchor | Age |
+| --- | --- | --- | --- |
+| 14 Nov 2026 | 5 Jumada II 1448 | Gregorian | Turning 18 |
+| 22 Apr 2027 | 17 Zilqadah 1448 | Hijri | Turning 19 |
+
+The two ages differ on purpose: a Hijri year is ~11 days shorter, so the Hijri
+count runs ahead. Each row says which anniversary it is and colours that
+calendar's date.
+
+The two anchors realign roughly every 33 years and land on the same day. When
+that happens `mergeSameDay` folds them into one row — anchor `BOTH`, both ages
+shown — because otherwise the list would print the same birthday twice on the
+same date and read as a bug. There's a test covering it.
 
 ### Months that don't always exist
 
@@ -93,6 +192,7 @@ Rows adjusted this way say so.
 src/
   lib/
     hijri/hijri.ts        Gregorian ↔ Hijri conversion (pure, tested)
+    groups/access.ts      membership checks — every scoped query goes through here
     occasions/
       occurrence.ts       when an occasion next comes round, in either calendar
       derive.ts           filling in whichever date wasn't typed
@@ -101,11 +201,14 @@ src/
     auth/                 scrypt passwords, database-backed sessions
     today.ts              today's date in the family's timezone
   app/
-    page.tsx              upcoming list, grouped by month
+    page.tsx              merged upcoming list, grouped by month, filterable
+    groups/               your groups; members and invite links
+    invite/[token]/       redeeming a join link
     events/new/           add an occasion
-    people/               family members and what's recorded for them
+    people/               rosters, per group
     actions/              server actions
-prisma/schema.prisma      User, Session, Person, Event, EventPerson
+prisma/schema.prisma      User, Session, Group, GroupMember, Invite,
+                          Person, Event, EventPerson
 ```
 
 Recurrence can't be pushed into SQL — a Hijri anniversary's next Gregorian date
@@ -114,20 +217,39 @@ A family list is a few hundred rows, which is nothing.
 
 ## Deploying to Railway
 
-1. Create a project, add a **Postgres** service.
-2. Add this repo as a service.
-3. Set variables on the app service:
-   - `DATABASE_URL` = `${{ Postgres.DATABASE_URL }}`
-   - `APP_TIME_ZONE` = the family's timezone, e.g. `Asia/Kolkata` (containers
-     run in UTC, so without this an evening birthday shows up a day late)
-4. Deploy. `railway.toml` runs `prisma migrate deploy` before the server starts.
+1. Push to GitHub.
+2. In Railway: **New Project → Deploy from GitHub repo**, pick this repo.
+3. Add a **Postgres** service to the same project (**New → Database → Postgres**).
+4. On the *app* service, under **Variables**:
+   - `DATABASE_URL` = `${{ Postgres.DATABASE_URL }}` — type the reference, don't
+     paste a URL, so it keeps working if the database is recreated
+   - `APP_TIME_ZONE` = e.g. `Asia/Kolkata`. Optional but wanted: containers run
+     in UTC, so without it an evening occasion shows up a day late.
+5. Under **Settings → Networking**, click **Generate Domain**.
+
+`railway.toml` handles the rest: it builds with `npm run build` (which runs
+`prisma generate` first) and starts with `prisma migrate deploy && next start`,
+so the schema is applied before the server takes traffic. `/login` is the
+health check.
+
+There is no session secret to set — sessions are database rows keyed by a
+random token, so there is no signed payload to protect.
+
+> **Never run `npm run db:seed` against production.** It is written to be
+> re-runnable locally, which means it *deletes every group, person, occasion and
+> user* before inserting the demo data. There is nothing to seed in production:
+> sign up through the app, create a group, and share an invite link.
 
 Migrations run on boot, which is fine for a single replica. If this ever scales
 out, move that to a Railway pre-deploy command so two instances can't migrate
 at once.
 
+`next build` does not need a database — the client connects on first query, not
+on import — so CI can typecheck and build without one.
+
 ## Accounts
 
-Anyone with an account sees and edits the one shared family list. Passwords are
-hashed with scrypt from Node's standard library — nothing native to compile —
-and sessions are rows in the database behind an httpOnly cookie.
+Passwords are hashed with scrypt from Node's standard library — nothing native
+to compile — and sessions are rows in the database behind an httpOnly cookie.
+A new account starts with no groups: you either create one or open an invite
+link someone sent you.

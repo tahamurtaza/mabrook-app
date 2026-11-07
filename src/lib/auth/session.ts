@@ -9,7 +9,13 @@ const SESSION_DAYS = 30;
 export interface SessionUser {
   id: string;
   email: string;
+  /** The full name. */
   name: string;
+  firstName: string;
+  /** Null only on accounts older than the field. */
+  lastName: string | null;
+  /** Hasn't finished or skipped the first-run guide yet. */
+  tourPending: boolean;
 }
 
 /** Start a session for a user and set the cookie. */
@@ -57,6 +63,9 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
+    firstName: session.user.firstName,
+    lastName: session.user.lastName,
+    tourPending: session.user.tourCompletedAt === null,
   };
 });
 
@@ -69,4 +78,12 @@ export async function destroySession(): Promise<void> {
     await prisma.session.delete({ where: { id: sessionId } }).catch(() => {});
   }
   store.delete(COOKIE_NAME);
+}
+
+/** Sign a user out everywhere but here, as after changing their password. */
+export async function endOtherSessions(userId: string): Promise<void> {
+  const store = await cookies();
+  await prisma.session.deleteMany({
+    where: { userId, id: { not: store.get(COOKIE_NAME)?.value } },
+  });
 }

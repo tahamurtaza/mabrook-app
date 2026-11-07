@@ -1,6 +1,10 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, type EventType } from "../src/generated/prisma";
+import {
+  PrismaClient,
+  type EventType,
+  type GroupType,
+} from "../src/generated/prisma";
 import { hashPassword } from "../src/lib/auth/password";
 import { gregorianToHijri } from "../src/lib/hijri/hijri";
 
@@ -13,7 +17,7 @@ interface SeedEvent {
   type: EventType;
   date: [number, number, number];
   afterSunset?: boolean;
-  observedCalendar?: "GREGORIAN" | "HIJRI";
+  observedCalendar?: "GREGORIAN" | "HIJRI" | "BOTH";
   recurring?: boolean;
   people: string[];
   notes?: string;
@@ -29,9 +33,12 @@ interface SeedGroup {
 const FAMILY_EVENTS: SeedEvent[] = [
   {
     // The worked example from the brief: 17 Zilqadah 1429.
+    // Observed by both, so it shows up twice a year — 14 November and
+    // 17 Zilqadah — which is what dual observance looks like in the list.
     title: "Taha's birthday",
     type: "BIRTHDAY",
     date: [2008, 11, 14],
+    observedCalendar: "BOTH",
     people: ["Taha"],
   },
   {
@@ -121,9 +128,13 @@ async function main() {
 
   const user = await prisma.user.create({
     data: {
-      name: "Demo",
+      name: "Demo Bombaywala",
+      firstName: "Demo",
+      lastName: "Bombaywala",
       email: "demo@mabrook.local",
       passwordHash: await hashPassword("mabrook123"),
+      // The demo login is for looking around, not for being onboarded.
+      tourCompletedAt: new Date(),
     },
   });
 

@@ -7,9 +7,7 @@ import {
   GROUP_TYPE_LABELS,
   GROUP_TYPE_ORDER,
 } from "@/lib/occasions/labels";
-
-const field =
-  "w-full rounded-lg border border-line bg-raised px-3 py-2 text-ink outline-none transition-colors placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent/20";
+import { fieldClass, labelClass, primaryButton } from "./form-styles";
 
 export function CreateGroupForm() {
   const [state, formAction, pending] = useActionState<GroupFormState, FormData>(
@@ -18,34 +16,44 @@ export function CreateGroupForm() {
   );
 
   return (
-    <form action={formAction} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
-        <div>
-          <label htmlFor="group-name" className="mb-1.5 block text-sm font-medium">
-            Group name
-          </label>
-          <input
-            id="group-name"
-            name="name"
-            required
-            maxLength={80}
-            className={field}
-            placeholder="The Bombaywalas"
-          />
-        </div>
-        <div>
-          <label htmlFor="group-type" className="mb-1.5 block text-sm font-medium">
-            Kind
-          </label>
-          <select id="group-type" name="type" defaultValue="FAMILY" className={field}>
-            {GROUP_TYPE_ORDER.map((type) => (
-              <option key={type} value={type}>
-                {GROUP_TYPE_EMOJI[type]}  {GROUP_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
-        </div>
+    <form action={formAction} className="space-y-4">
+      <div>
+        <label htmlFor="group-name" className={labelClass}>
+          Name
+        </label>
+        <input
+          id="group-name"
+          name="name"
+          required
+          maxLength={80}
+          className={fieldClass}
+          placeholder="The Bombaywalas"
+        />
       </div>
+
+      <fieldset>
+        <legend className={labelClass}>Kind</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {GROUP_TYPE_ORDER.map((type) => (
+            <label
+              key={type}
+              className="cursor-pointer rounded-full border border-line px-2.5 py-1 text-sm text-muted transition-colors hover:border-line-strong has-checked:border-ink has-checked:bg-ink has-checked:text-paper"
+            >
+              <input
+                type="radio"
+                name="type"
+                value={type}
+                defaultChecked={type === "FAMILY"}
+                className="sr-only"
+              />
+              <span aria-hidden="true" className="mr-1">
+                {GROUP_TYPE_EMOJI[type]}
+              </span>
+              {GROUP_TYPE_LABELS[type]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       {state.error && (
         <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
@@ -53,11 +61,7 @@ export function CreateGroupForm() {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className={`${primaryButton} w-full`}>
         {pending ? "Creating…" : "Create group"}
       </button>
     </form>

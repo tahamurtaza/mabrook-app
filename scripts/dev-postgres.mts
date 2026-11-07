@@ -17,7 +17,15 @@ const PORT = Number(process.env.PGLITE_PORT ?? 5432);
 const DATA_DIR = process.env.PGLITE_DIR ?? "./.pglite";
 
 const db = await PGlite.create(DATA_DIR);
-const server = new PGLiteSocketServer({ db, port: PORT, host: "127.0.0.1" });
+const server = new PGLiteSocketServer({
+  db,
+  port: PORT,
+  host: "127.0.0.1",
+  // Defaults to 1, which the dev server's connection pool blows through
+  // immediately — every request then dies with `ConnectionClosed`. Queries are
+  // still serialised inside PGlite; this only allows the sockets to stay open.
+  maxConnections: 20,
+});
 
 await server.start();
 console.log(`Postgres (PGlite) listening on 127.0.0.1:${PORT}, data in ${DATA_DIR}`);

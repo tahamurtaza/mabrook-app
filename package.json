@@ -8,6 +8,7 @@
     "start": "prisma migrate deploy && next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:smoke": "tsx scripts/smoke.mts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:local": "tsx scripts/dev-postgres.mts",
