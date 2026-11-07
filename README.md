@@ -32,7 +32,7 @@ The seed creates a login: `demo@mabrook.local` / `mabrook123`.
 `npm run db:local` runs [PGlite](https://pglite.dev) — real Postgres compiled to
 WASM — behind the Postgres wire protocol on port 5432, with its data in
 `.pglite/`. It's a development convenience so there's no database to install;
-production uses Railway's Postgres and nothing outside `scripts/` imports it.
+production uses Neon's Postgres and nothing outside `scripts/` imports it.
 
 ## Scripts
 
@@ -215,22 +215,32 @@ Recurrence can't be pushed into SQL — a Hijri anniversary's next Gregorian dat
 depends on the conversion — so the list is loaded and projected in memory.
 A family list is a few hundred rows, which is nothing.
 
-## Deploying to Railway
+## Deploying to Vercel
+
+The site runs on Vercel and the database on Neon, added from inside Vercel.
 
 1. Push to GitHub.
-2. In Railway: **New Project → Deploy from GitHub repo**, pick this repo.
-3. Add a **Postgres** service to the same project (**New → Database → Postgres**).
-4. On the *app* service, under **Variables**:
-   - `DATABASE_URL` = `${{ Postgres.DATABASE_URL }}` — type the reference, don't
-     paste a URL, so it keeps working if the database is recreated
-   - `APP_TIME_ZONE` = e.g. `Asia/Kolkata`. Optional but wanted: containers run
-     in UTC, so without it an evening occasion shows up a day late.
-5. Under **Settings → Networking**, click **Generate Domain**.
+2. On vercel.com: **Add New → Project**, import this repo. The defaults are
+   right; there is nothing to change on the build screen.
+3. In the project, open **Storage → Create Database → Neon**. Choose the
+   Singapore region (`aws-ap-southeast-1`) to sit next to the site, and connect
+   it to the Production and Preview environments with **a database branch for
+   each preview** turned on. That sets `DATABASE_URL` (pooled, used by the app)
+   and `DATABASE_URL_UNPOOLED` (direct, used by migrations).
+4. Under **Settings → Environment Variables**, add `APP_TIME_ZONE`, e.g.
+   `Asia/Kolkata`. Optional but wanted: servers run in UTC, so without it an
+   evening occasion shows up a day late.
+5. **Deployments → Redeploy**, so the build picks up the new variables.
 
-`railway.toml` handles the rest: it builds with `npm run build` (which runs
-`prisma generate` first) and starts with `prisma migrate deploy && next start`,
-so the schema is applied before the server takes traffic. `/login` is the
-health check.
+Vercel runs the `vercel-build` script rather than `build`. It applies pending
+migrations with `prisma migrate deploy` before `next build`, so the schema is
+in place before the new version goes live. That is why previews need their own
+database branch: without one, a preview of a branch with a new migration would
+apply it to the production database.
+
+`vercel.json` pins the site's functions to Singapore (`sin1`), the same region
+as the database. Every page queries it, so a site in the US talking to a
+database in Asia would be slow on every click.
 
 There is no session secret to set — sessions are database rows keyed by a
 random token, so there is no signed payload to protect.
@@ -240,12 +250,8 @@ random token, so there is no signed payload to protect.
 > user* before inserting the demo data. There is nothing to seed in production:
 > sign up through the app, create a group, and share an invite link.
 
-Migrations run on boot, which is fine for a single replica. If this ever scales
-out, move that to a Railway pre-deploy command so two instances can't migrate
-at once.
-
-`next build` does not need a database — the client connects on first query, not
-on import — so CI can typecheck and build without one.
+`npm run build` does not need a database — the client connects on first query,
+not on import — so CI can typecheck and build without one.
 
 ## Accounts
 

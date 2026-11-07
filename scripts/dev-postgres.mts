@@ -7,7 +7,7 @@
  *
  *   npm run db:local        # start it, leave it running
  *
- * This is a dev convenience only. Railway provides the real Postgres in
+ * This is a dev convenience only. Neon provides the real Postgres in
  * production, and nothing outside this script imports PGlite.
  */
 import { PGlite } from "@electric-sql/pglite";

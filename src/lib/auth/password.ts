@@ -11,7 +11,7 @@ const KEY_LENGTH = 64;
 
 /**
  * Hash a password with scrypt, which is memory-hard and built into Node — no
- * native dependency to compile on Railway.
+ * native dependency to compile on the host.
  *
  * Stored as `salt:hash`, both hex.
  */

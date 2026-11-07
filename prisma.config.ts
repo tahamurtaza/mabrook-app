@@ -8,8 +8,10 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    // Not `env()`, which throws: `prisma generate` runs during the build and
-    // needs no database, and the commands that do will say so themselves.
-    url: process.env.DATABASE_URL ?? "",
+    // Migrations need a direct connection; Neon's pooled one (DATABASE_URL,
+    // which the app uses) can't hold the lock they take. Locally there's only
+    // the one URL. Not `env()`, which throws: `prisma generate` runs in the
+    // build and needs no database at all.
+    url: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "",
   },
 });
