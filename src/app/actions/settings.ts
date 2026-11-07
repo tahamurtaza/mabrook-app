@@ -65,7 +65,7 @@ export async function updateName(
 
     const dates = await tx.personalDate.findMany({
       where: { userId: user.id },
-      select: { id: true, type: true, label: true },
+      select: { id: true, type: true, label: true, observedCalendar: true },
     });
     for (const date of dates) {
       await tx.event.updateMany({

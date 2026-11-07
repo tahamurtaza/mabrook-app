@@ -121,7 +121,14 @@ export async function updatePersonalDate(
     // Every group it's shared with sees the correction.
     await tx.event.updateMany({
       where: { personalDateId: id },
-      data: { ...date, title: personalDateTitle(user.name, { type: date.type, label }) },
+      data: {
+        ...date,
+        title: personalDateTitle(user.name, {
+          type: date.type,
+          label,
+          observedCalendar: date.observedCalendar,
+        }),
+      },
     });
     return true;
   });

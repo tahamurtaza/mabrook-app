@@ -89,11 +89,21 @@ export function personalDateLabel(date: { type: EventType; label: string | null 
 /** The title a personal date takes on a group's calendar, where it needs a name. */
 export function personalDateTitle(
   name: string,
-  date: { type: EventType; label: string | null },
+  date: { type: EventType; label: string | null; observedCalendar: ObservedCalendar },
 ): string {
   if (date.type === "OTHER") return date.label ? `${name}: ${date.label}` : `${name}'s occasion`;
   if (date.type === "SCHOOL_START") return `${name} started school`;
+  if (date.type === "BIRTHDAY") return `${name}'s ${birthdayWord(date.observedCalendar)}`;
   return `${name}'s ${EVENT_TYPE_LABELS[date.type].toLowerCase()}`;
+}
+
+/**
+ * What a birthday is called. Waras is the Hijri word for it, so a birthday kept
+ * by the Hijri calendar is a Waras. Anyone kept by both stays a birthday, the
+ * word a Gregorian reader expects.
+ */
+export function birthdayWord(observed: ObservedCalendar): string {
+  return observed === "HIJRI" ? "Waras" : "birthday";
 }
 
 /**
